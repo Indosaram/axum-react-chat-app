@@ -10,10 +10,7 @@ use sea_orm::{
     ModelTrait, QueryFilter,
 };
 
-use crate::entities::{
-    prelude::Users,
-    users::{ActiveModel, Column, Model},
-};
+use crate::entities::users::{ActiveModel, Column, Entity as UsersEntity, Model};
 
 pub async fn get_user(
     State(conn): State<DatabaseConnection>,
@@ -29,7 +26,13 @@ pub async fn get_user(
         condition = condition.add(Column::Username.contains(username));
     }
 
-    Json(Users::find().filter(condition).all(&conn).await.unwrap())
+    Json(
+        UsersEntity::find()
+            .filter(condition)
+            .all(&conn)
+            .await
+            .unwrap(),
+    )
 }
 
 #[derive(serde::Deserialize)]
@@ -58,7 +61,7 @@ pub async fn put_user(
     State(conn): State<DatabaseConnection>,
     Json(user): Json<UpsertModel>,
 ) -> Json<Model> {
-    let result = Users::find_by_id(user.id.unwrap())
+    let result = UsersEntity::find_by_id(user.id.unwrap())
         .one(&conn)
         .await
         .unwrap()
@@ -88,7 +91,7 @@ pub async fn delete_user(
         condition = condition.add(Column::Username.contains(username));
     }
 
-    let user = Users::find()
+    let user = UsersEntity::find()
         .filter(condition)
         .one(&conn)
         .await

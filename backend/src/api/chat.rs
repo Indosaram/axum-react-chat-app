@@ -14,14 +14,12 @@ use tokio::sync::broadcast::{self};
 use tokio_stream::wrappers::BroadcastStream;
 
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait,
-    QueryFilter,
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
 };
 
-use crate::entities::{chat::Column, room::ActiveModel as ActiveRoom};
 use crate::entities::{
-    chat::{ActiveModel as ActiveChat, Model as Chat},
-    prelude::{Chat as ChatEntity, Room as RoomEntity},
+    chat::{ActiveModel as ActiveChat, Column, Entity as ChatEntity, Model as Chat},
+    room::{ActiveModel as ActiveRoom, Entity as RoomEntity},
 };
 
 pub async fn subscribe(Extension(queue): Extension<broadcast::Sender<Chat>>) -> impl IntoResponse {
@@ -50,9 +48,9 @@ pub async fn send(
     let room = RoomEntity::find_by_id(new_message.room_id)
         .one(&conn)
         .await
+        .unwrap()
         .unwrap();
 
-    let room = room.unwrap();
     // parse string to vector
     let mut participants: Vec<String> = serde_json::from_str(&room.participants).unwrap();
     // if sender is not in participants, add them
@@ -67,8 +65,7 @@ pub async fn send(
         id: ActiveValue::set(room.id),
         participants: ActiveValue::set(participants),
     };
-    let room = room
-        .update(&conn)
+    room.update(&conn)
         .await
         .expect("Error updating room participants");
 
@@ -76,7 +73,7 @@ pub async fn send(
         id: ActiveValue::not_set(),
         sender: ActiveValue::set(new_message.sender),
         message: ActiveValue::set(new_message.message),
-        room_id: ActiveValue::set(room.id),
+        room_id: ActiveValue::set(new_message.room_id),
         timestamp: ActiveValue::set(chrono::Utc::now().to_rfc3339()),
     };
 

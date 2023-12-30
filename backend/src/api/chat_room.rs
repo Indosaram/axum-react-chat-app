@@ -12,9 +12,8 @@ use sea_orm::{
 };
 
 use crate::entities::{
-    chat,
-    prelude::{Chat, Room},
-    room::{ActiveModel, Column, Model},
+    chat::{self, Entity as ChatEntity},
+    room::{ActiveModel, Column, Entity as RoomEntity, Model},
 };
 
 pub async fn get_room(
@@ -27,7 +26,11 @@ pub async fn get_room(
         condition = condition.add(Column::Id.eq(id.parse::<i32>().unwrap()));
     }
 
-    let rooms = Room::find().filter(condition).all(&conn).await.unwrap();
+    let rooms = RoomEntity::find()
+        .filter(condition)
+        .all(&conn)
+        .await
+        .unwrap();
 
     let mut new_rooms: Vec<NewRoom> = Vec::new();
 
@@ -67,7 +70,7 @@ pub async fn put_room(
     State(conn): State<DatabaseConnection>,
     Json(room): Json<NewRoom>,
 ) -> Json<Model> {
-    let result = Room::find_by_id(room.id.unwrap())
+    let result = RoomEntity::find_by_id(room.id.unwrap())
         .one(&conn)
         .await
         .unwrap()
@@ -90,7 +93,7 @@ pub async fn delete_room(
 ) -> Json<&'static str> {
     let id = params.get("id").unwrap().parse::<i32>().unwrap();
 
-    let chats = Chat::find()
+    let chats = ChatEntity::find()
         .filter(chat::Column::RoomId.eq(id))
         .all(&conn)
         .await
@@ -100,7 +103,11 @@ pub async fn delete_room(
         chat.delete(&conn).await.unwrap();
     }
 
-    let room = Room::find_by_id(id).one(&conn).await.unwrap().unwrap();
+    let room = RoomEntity::find_by_id(id)
+        .one(&conn)
+        .await
+        .unwrap()
+        .unwrap();
 
     room.delete(&conn).await.unwrap();
 
