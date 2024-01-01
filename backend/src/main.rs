@@ -5,6 +5,7 @@ mod entities;
 use api::{
     chat::{get_chat, send, subscribe},
     chat_room::{delete_room, get_room, post_room, put_room},
+    state::AppState,
     user::{delete_user, get_user, post_user, put_user},
 };
 use db::init::init_db;
@@ -14,12 +15,8 @@ use axum::{
     Router,
 };
 
-use sea_orm::DatabaseConnection;
-
-use entities::chat::Model as Chat;
 use tokio::sync::broadcast;
 use tower_http::{
-    add_extension::AddExtensionLayer,
     cors::{Any, CorsLayer},
     services::{ServeDir, ServeFile},
 };
@@ -34,9 +31,11 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .with(EnvFilter::from_default_env())
         .init();
 
-    let conn: DatabaseConnection = init_db().await;
+    let state = AppState {
+        conn: init_db().await,
+        queue: broadcast::channel(10).0,
+    };
 
-    let message_queue: broadcast::Sender<Chat> = broadcast::channel(10).0;
     let app = Router::new()
         .nest(
             "/chat",
@@ -59,7 +58,6 @@ async fn main() -> shuttle_axum::ShuttleAxum {
                 .put(put_user)
                 .delete(delete_user),
         )
-        .layer(AddExtensionLayer::new(message_queue))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -70,6 +68,7 @@ async fn main() -> shuttle_axum::ShuttleAxum {
             "/",
             ServeDir::new("static").not_found_service(ServeFile::new("static/index.html")),
         )
-        .with_state(conn);
+        .with_state(state);
+
     Ok(app.into())
 }

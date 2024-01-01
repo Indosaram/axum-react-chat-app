@@ -1,3 +1,4 @@
+use super::state::AppState;
 use std::collections::HashMap;
 
 use axum::{
@@ -6,14 +7,13 @@ use axum::{
 };
 
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, DatabaseConnection, EntityTrait,
-    ModelTrait, QueryFilter,
+    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, EntityTrait, ModelTrait, QueryFilter,
 };
 
 use crate::entities::users::{ActiveModel, Column, Entity as UsersEntity, Model};
 
 pub async fn get_user(
-    State(conn): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Vec<Model>> {
     let mut condition = Condition::all();
@@ -29,7 +29,7 @@ pub async fn get_user(
     Json(
         UsersEntity::find()
             .filter(condition)
-            .all(&conn)
+            .all(&state.conn)
             .await
             .unwrap(),
     )
@@ -43,7 +43,7 @@ pub struct UpsertModel {
 }
 
 pub async fn post_user(
-    State(conn): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Json(user): Json<UpsertModel>,
 ) -> Json<Model> {
     let new_user = ActiveModel {
@@ -52,17 +52,14 @@ pub async fn post_user(
         password: ActiveValue::Set(user.password.unwrap()),
     };
 
-    let result = new_user.insert(&conn).await.unwrap();
+    let result = new_user.insert(&state.conn).await.unwrap();
 
     Json(result)
 }
 
-pub async fn put_user(
-    State(conn): State<DatabaseConnection>,
-    Json(user): Json<UpsertModel>,
-) -> Json<Model> {
+pub async fn put_user(State(state): State<AppState>, Json(user): Json<UpsertModel>) -> Json<Model> {
     let result = UsersEntity::find_by_id(user.id.unwrap())
-        .one(&conn)
+        .one(&state.conn)
         .await
         .unwrap()
         .unwrap();
@@ -73,11 +70,11 @@ pub async fn put_user(
         password: ActiveValue::Set(user.password.unwrap_or(result.password)),
     };
 
-    Json(new_user.update(&conn).await.unwrap())
+    Json(new_user.update(&state.conn).await.unwrap())
 }
 
 pub async fn delete_user(
-    State(conn): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<&'static str> {
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
@@ -93,12 +90,12 @@ pub async fn delete_user(
 
     let user = UsersEntity::find()
         .filter(condition)
-        .one(&conn)
+        .one(&state.conn)
         .await
         .unwrap()
         .unwrap();
 
-    user.delete(&conn).await.unwrap();
+    user.delete(&state.conn).await.unwrap();
 
     Json("Deleted")
 }

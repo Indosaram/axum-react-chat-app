@@ -1,3 +1,4 @@
+use super::state::AppState;
 use std::collections::HashMap;
 
 use axum::{
@@ -7,8 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, DatabaseConnection, EntityTrait,
-    ModelTrait, QueryFilter,
+    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, EntityTrait, ModelTrait, QueryFilter,
 };
 
 use crate::entities::{
@@ -17,7 +17,7 @@ use crate::entities::{
 };
 
 pub async fn get_room(
-    State(conn): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Vec<NewRoom>> {
     let mut condition = Condition::all();
@@ -28,7 +28,7 @@ pub async fn get_room(
 
     let rooms = RoomEntity::find()
         .filter(condition)
-        .all(&conn)
+        .all(&state.conn)
         .await
         .unwrap();
 
@@ -52,10 +52,7 @@ pub struct NewRoom {
     participants: Vec<String>,
 }
 
-pub async fn post_room(
-    State(conn): State<DatabaseConnection>,
-    Json(room): Json<NewRoom>,
-) -> Json<Model> {
+pub async fn post_room(State(state): State<AppState>, Json(room): Json<NewRoom>) -> Json<Model> {
     let participants = serde_json::to_string(&room.participants).unwrap();
 
     let room = ActiveModel {
@@ -63,15 +60,12 @@ pub async fn post_room(
         participants: ActiveValue::Set(participants),
     };
 
-    Json(room.insert(&conn).await.unwrap())
+    Json(room.insert(&state.conn).await.unwrap())
 }
 
-pub async fn put_room(
-    State(conn): State<DatabaseConnection>,
-    Json(room): Json<NewRoom>,
-) -> Json<Model> {
+pub async fn put_room(State(state): State<AppState>, Json(room): Json<NewRoom>) -> Json<Model> {
     let result = RoomEntity::find_by_id(room.id.unwrap())
-        .one(&conn)
+        .one(&state.conn)
         .await
         .unwrap()
         .unwrap();
@@ -84,32 +78,32 @@ pub async fn put_room(
         participants: ActiveValue::Set(serde_json::to_string(&participants).unwrap()),
     };
 
-    Json(new_room.update(&conn).await.unwrap())
+    Json(new_room.update(&state.conn).await.unwrap())
 }
 
 pub async fn delete_room(
-    State(conn): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<&'static str> {
     let id = params.get("id").unwrap().parse::<i32>().unwrap();
 
     let chats = ChatEntity::find()
         .filter(chat::Column::RoomId.eq(id))
-        .all(&conn)
+        .all(&state.conn)
         .await
         .unwrap();
 
     for chat in chats {
-        chat.delete(&conn).await.unwrap();
+        chat.delete(&state.conn).await.unwrap();
     }
 
     let room = RoomEntity::find_by_id(id)
-        .one(&conn)
+        .one(&state.conn)
         .await
         .unwrap()
         .unwrap();
 
-    room.delete(&conn).await.unwrap();
+    room.delete(&state.conn).await.unwrap();
 
     Json("Deleted")
 }
