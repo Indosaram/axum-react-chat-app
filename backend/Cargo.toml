@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "migration"]
+
 [package]
 name = "axum-chat-app"
 version = "0.1.0"
@@ -6,9 +9,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-shuttle-axum = { version = "0.35.2", default-features = false, features = ["axum-0-7"] }
-shuttle-runtime = { version = "0.35.2", default-features = false }
-axum = { version = "0.7.3", features = ["json"] }
+shuttle-axum = { version = "0.43.0", default-features = false, features = ["axum"] }
+shuttle-runtime = { version = "0.43.0", default-features = false }
+shuttle-shared-db = { version = "0.43.0", features = ["postgres", "sqlx"] }
+axum = { version = "0.7.3", features = ["json", "macros"] }
 tokio = { version = "1.35.1", features = ["full"] }
 tokio-stream = { version = "0.1.14", features = ["full"] }
 tower-http = { version = "0.5.0", features = ["full"] }
@@ -16,7 +20,9 @@ futures-util = "0.3.30"
 tower = { version = "0.4.13", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-sea-orm = { version = "0.12.10", features = [ "sqlx-sqlite", "runtime-tokio-native-tls", "macros" ] }
+sea-orm = { version = "0.12.10", features = [ "sqlx-postgres", "runtime-tokio-native-tls", "macros" ] }
+sqlx = "0.7.3"
+migration = { path = "migration" }
 serde_json = "1.0.108"
 serde = "1.0.193"
 dotenvy = "0.15.7"

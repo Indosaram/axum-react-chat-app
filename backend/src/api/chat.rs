@@ -1,5 +1,3 @@
-use super::state::AppState;
-
 use std::collections::HashMap;
 
 use axum::{
@@ -12,17 +10,22 @@ use axum::{
 };
 use futures_util::stream::StreamExt;
 use serde_json::json;
+use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
-use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
+};
 
 use crate::entities::{
     chat::{ActiveModel as ActiveChat, Column, Entity as ChatEntity, Model as Chat},
     room::{ActiveModel as ActiveRoom, Entity as RoomEntity},
 };
 
-pub async fn subscribe(State(state): State<AppState>) -> impl IntoResponse {
-    let stream = BroadcastStream::new(state.queue.subscribe()).map(|msg| match msg {
+pub async fn subscribe(
+    State(queue): State<broadcast::Sender<Chat>>,
+) -> impl IntoResponse {
+    let stream = BroadcastStream::new(queue.subscribe()).map(|msg| match msg {
         Ok(msg) => Ok(Event::default()
             .event("message")
             .data(json!(msg).to_string())),
@@ -40,11 +43,12 @@ pub struct NewMessage {
 }
 
 pub async fn send(
-    State(state): State<AppState>,
+    State(conn): State<DatabaseConnection>,
+    State(queue): State<broadcast::Sender<Chat>>,
     Json(new_message): Json<NewMessage>,
 ) -> Json<Chat> {
     let room = RoomEntity::find_by_id(new_message.room_id)
-        .one(&state.conn)
+        .one(&conn)
         .await
         .unwrap()
         .unwrap();
@@ -63,7 +67,7 @@ pub async fn send(
         id: ActiveValue::set(room.id),
         participants: ActiveValue::set(participants),
     };
-    room.update(&state.conn)
+    room.update(&conn)
         .await
         .expect("Error updating room participants");
 
@@ -72,16 +76,15 @@ pub async fn send(
         sender: ActiveValue::set(new_message.sender),
         message: ActiveValue::set(new_message.message),
         room_id: ActiveValue::set(new_message.room_id),
-        timestamp: ActiveValue::set(chrono::Utc::now().to_rfc3339()),
+        timestamp: ActiveValue::set(chrono::Utc::now().naive_utc()),
     };
 
     let new_message = new_message
-        .insert(&state.conn)
+        .insert(&conn)
         .await
         .expect("Error inserting message");
 
-    state
-        .queue
+    queue
         .send(new_message.clone())
         .expect("Error sending message");
 
@@ -89,7 +92,7 @@ pub async fn send(
 }
 
 pub async fn get_chat(
-    State(state): State<AppState>,
+    State(conn): State<DatabaseConnection>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Vec<Chat>> {
     let room_id = params.get("room_id").unwrap();
@@ -97,7 +100,7 @@ pub async fn get_chat(
     Json(
         ChatEntity::find()
             .filter(Column::RoomId.eq(room_id.parse::<i32>().unwrap()))
-            .all(&state.conn)
+            .all(&conn)
             .await
             .unwrap(),
     )
