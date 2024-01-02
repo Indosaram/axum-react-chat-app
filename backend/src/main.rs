@@ -1,5 +1,4 @@
 mod api;
-mod db;
 mod entities;
 
 use api::{
@@ -8,13 +7,15 @@ use api::{
     state::AppState,
     user::{delete_user, get_user, post_user, put_user},
 };
-use db::init::init_db;
 
 use axum::{
     routing::{get, post},
     Router,
 };
 
+use migration::{Migrator, MigratorTrait};
+use sea_orm::SqlxPostgresConnector;
+use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -23,7 +24,7 @@ use tower_http::{
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[shuttle_runtime::main]
-async fn main() -> shuttle_axum::ShuttleAxum {
+async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::ShuttleAxum {
     dotenvy::dotenv().ok();
 
     tracing_subscriber::registry()
@@ -32,9 +33,11 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .init();
 
     let state = AppState {
-        conn: init_db().await,
+        conn: SqlxPostgresConnector::from_sqlx_postgres_pool(pool),
         queue: broadcast::channel(10).0,
     };
+
+    Migrator::up(&state.conn, None).await.unwrap();
 
     let app = Router::new()
         .nest(

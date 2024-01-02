@@ -1,4 +1,3 @@
-use super::state::AppState;
 use std::collections::HashMap;
 
 use axum::{
@@ -8,7 +7,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, EntityTrait, ModelTrait, QueryFilter,
+    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, DatabaseConnection, EntityTrait,
+    ModelTrait, QueryFilter,
 };
 
 use crate::entities::{
@@ -17,7 +17,7 @@ use crate::entities::{
 };
 
 pub async fn get_room(
-    State(state): State<AppState>,
+    State(conn): State<DatabaseConnection>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Vec<NewRoom>> {
     let mut condition = Condition::all();
@@ -28,7 +28,7 @@ pub async fn get_room(
 
     let rooms = RoomEntity::find()
         .filter(condition)
-        .all(&state.conn)
+        .all(&conn)
         .await
         .unwrap();
 
@@ -52,7 +52,10 @@ pub struct NewRoom {
     participants: Vec<String>,
 }
 
-pub async fn post_room(State(state): State<AppState>, Json(room): Json<NewRoom>) -> Json<Model> {
+pub async fn post_room(
+    State(conn): State<DatabaseConnection>,
+    Json(room): Json<NewRoom>,
+) -> Json<Model> {
     let participants = serde_json::to_string(&room.participants).unwrap();
 
     let room = ActiveModel {
@@ -60,12 +63,15 @@ pub async fn post_room(State(state): State<AppState>, Json(room): Json<NewRoom>)
         participants: ActiveValue::Set(participants),
     };
 
-    Json(room.insert(&state.conn).await.unwrap())
+    Json(room.insert(&conn).await.unwrap())
 }
 
-pub async fn put_room(State(state): State<AppState>, Json(room): Json<NewRoom>) -> Json<Model> {
+pub async fn put_room(
+    State(conn): State<DatabaseConnection>,
+    Json(room): Json<NewRoom>,
+) -> Json<Model> {
     let result = RoomEntity::find_by_id(room.id.unwrap())
-        .one(&state.conn)
+        .one(&conn)
         .await
         .unwrap()
         .unwrap();
@@ -78,32 +84,32 @@ pub async fn put_room(State(state): State<AppState>, Json(room): Json<NewRoom>) 
         participants: ActiveValue::Set(serde_json::to_string(&participants).unwrap()),
     };
 
-    Json(new_room.update(&state.conn).await.unwrap())
+    Json(new_room.update(&conn).await.unwrap())
 }
 
 pub async fn delete_room(
-    State(state): State<AppState>,
+    State(conn): State<DatabaseConnection>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<&'static str> {
     let id = params.get("id").unwrap().parse::<i32>().unwrap();
 
     let chats = ChatEntity::find()
         .filter(chat::Column::RoomId.eq(id))
-        .all(&state.conn)
+        .all(&conn)
         .await
         .unwrap();
 
     for chat in chats {
-        chat.delete(&state.conn).await.unwrap();
+        chat.delete(&conn).await.unwrap();
     }
 
     let room = RoomEntity::find_by_id(id)
-        .one(&state.conn)
+        .one(&conn)
         .await
         .unwrap()
         .unwrap();
 
-    room.delete(&state.conn).await.unwrap();
+    room.delete(&conn).await.unwrap();
 
     Json("Deleted")
 }
